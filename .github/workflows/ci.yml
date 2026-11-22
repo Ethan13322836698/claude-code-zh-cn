@@ -159,7 +159,7 @@ jobs:
           architecture: x64
       - name: Install native build dependency
         run: npm install --global node-lief@1.3.2
-      - name: Build and verify the localized Intel binary
+      - name: Verify localization on a temporary Intel binary
         shell: bash
         run: |
           test "$(node -p 'process.platform + "-" + process.arch')" = darwin-x64
@@ -180,11 +180,19 @@ jobs:
           test "${version_output%% *}" = "$CLAUDE_VERSION"
           "$work/build/claude" --help > "$work/help.txt"
           grep -F '用法' "$work/help.txt"
-          node scripts/verify-native-install.js "$upstream"
-
-          tar -czf "$RUNNER_TEMP/claude-zh-cn-darwin-x64.tar.gz" -C "$work/build" claude
+          # Package tracked localization files only. Exercise the extracted installer.
+          archive="$RUNNER_TEMP/claude-code-zh-cn-plugin.tar.gz"
+          git archive --format=tar.gz --prefix=claude-code-zh-cn/ --output="$archive" HEAD -- \
+            .claude-plugin plugin install.sh uninstall.sh README.md LICENSE \
+            settings-overlay.json verbs tips bun-binary-io.js compute-patch-revision.sh \
+            scripts/install-json-helper.js scripts/patch-bytecode.js scripts/native-repair.js scripts/zh-cn-doctor.js
+          mkdir "$work/delivery"
+          tar -xzf "$archive" -C "$work/delivery"
+          delivery="$work/delivery/claude-code-zh-cn"
+          cp scripts/verify-native-install.js "$delivery/scripts/"
+          node "$delivery/scripts/verify-native-install.js" "$upstream"
       - uses: actions/upload-artifact@v6
         with:
-          name: claude-zh-cn-darwin-x64-${{ env.CLAUDE_VERSION }}
-          path: ${{ runner.temp }}/claude-zh-cn-darwin-x64.tar.gz
+          name: claude-code-zh-cn-plugin-darwin-x64-tested
+          path: ${{ runner.temp }}/claude-code-zh-cn-plugin.tar.gz
           if-no-files-found: error
