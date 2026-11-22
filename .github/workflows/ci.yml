@@ -141,3 +141,50 @@ jobs:
       - name: Verify upgrade through the installed launcher
         shell: bash
         run: bash scripts/verify-native-upgrade.sh
+
+  macos-x64-build:
+    name: macos-x64-build
+    runs-on: macos-15-intel
+    env:
+      CLAUDE_VERSION: "2.1.296"
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      DISABLE_AUTOUPDATER: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          architecture: x64
+      - name: Install native build dependency
+        run: npm install --global node-lief@1.3.2
+      - name: Build and verify the localized Intel binary
+        shell: bash
+        run: |
+          test "$(node -p 'process.platform + "-" + process.arch')" = darwin-x64
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          archive="$(npm pack "@anthropic-ai/claude-code-darwin-x64@$CLAUDE_VERSION" --pack-destination "$work" --silent)"
+          tar -xzf "$work/$archive" -C "$work"
+          upstream="$work/package/claude"
+          test "$(lipo -archs "$upstream")" = x86_64
+
+          mkdir "$work/build" "$work/config"
+          export CLAUDE_CONFIG_DIR="$work/config"
+          cp -p "$upstream" "$work/build/claude"
+          node scripts/patch-bytecode.js patch "$work/build/claude" cli-translations.json --json
+          codesign --verify --strict "$work/build/claude"
+          test "$(lipo -archs "$work/build/claude")" = x86_64
+          version_output="$("$work/build/claude" --version)"
+          test "${version_output%% *}" = "$CLAUDE_VERSION"
+          "$work/build/claude" --help > "$work/help.txt"
+          grep -F '用法' "$work/help.txt"
+          node scripts/verify-native-install.js "$upstream"
+
+          tar -czf "$RUNNER_TEMP/claude-zh-cn-darwin-x64.tar.gz" -C "$work/build" claude
+      - uses: actions/upload-artifact@v6
+        with:
+          name: claude-zh-cn-darwin-x64-${{ env.CLAUDE_VERSION }}
+          path: ${{ runner.temp }}/claude-zh-cn-darwin-x64.tar.gz
+          if-no-files-found: error

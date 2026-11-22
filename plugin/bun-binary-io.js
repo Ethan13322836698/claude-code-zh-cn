@@ -765,6 +765,7 @@ function cmdRepack() {
 function isClaudePackageName(name) {
   return name === "@anthropic-ai/claude-code" ||
     name === "@anthropic-ai/claude-code-darwin-arm64" ||
+    name === "@anthropic-ai/claude-code-darwin-x64" ||
     name === "@anthropic-ai/claude-code-linux-x64" ||
     name === "@anthropic-ai/claude-code-linux-arm64" ||
     name === "@anthropic-ai/claude-code-linux-x64-musl" ||

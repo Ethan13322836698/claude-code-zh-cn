@@ -331,7 +331,8 @@ function readContainer(binaryPath) {
   const parsed = io.extractNativeBun(lief, binaryPath);
   const entry = io.findClaudeModule(parsed.bunData, parsed.bunOffsets, parsed.moduleStructSize);
   if (!entry || !io.claudeBytecodeGuardReason(entry)) throw new Error("当前程序不是已识别的 Bun bytecode 容器");
-  return { ...parsed, bunData: Buffer.from(parsed.bunData) };
+  const macX64 = parsed.format === "MachO" && parsed.binary.header.cpuType === lief.MachO.Header.CPU_TYPE.X86_64;
+  return { ...parsed, macX64, bunData: Buffer.from(parsed.bunData) };
 }
 
 // Windows 2.1.289 的部分状态文字由 JS 片段动态拼接，常量池替换并不能
@@ -512,6 +513,28 @@ const MAC_DISPLAY_BUILDS = new Map([
   ]]],
 ]);
 
+// Official darwin-x64 npm package and its architecture-specific display modules.
+const MAC_X64_DISPLAY_BUILDS = new Map([
+  ["2.1.296", ["a6bf4f30be241053a923f3820ad23c5991d2f5ac2935b3a8dd64da218d9cc603", [
+    ["chunk-2gj0pqp7.js", "permission", "3419880c1c411f8990b2ccc85f731e64d078f2d8cba11e427066766ad88f71b9"],
+    ["chunk-xxs9ykab.js", "permission-mode", "f2e1707f63c57406a858c6731dd20ecff3004508e069d63cf7e55e223f8808b3"],
+    ["chunk-a0vjqn1v.js", "key-hint", "3efdf0bfdab7935f2d320021595e9ae46c4e28d8d04c5431e6f269a7e4f72efa"],
+    ["chunk-e77jmv55.js", "mcp-help", "7ac0b3640e3b335b6cccb2c7239a470de5de817797d82fd05af2ffb93fa702b0"],
+    ["chunk-ty8kp5g6.js", "diff-panel", "8c132352ea3fa880691602ebc7556f4729c6c4519b17b259c11a76e012b44019"],
+    ["chunk-v3qnk33a.js", "help", "c8f842c27c46ec869f45a4cc73c81609ad8d1c0e7bdcc13482aa6968c0f5c859"],
+    ["chunk-a553f8x9.js", "help", "082149e92303994fa9e36ace7554ac74cb0b42426a4770a0c79b5f2330a5cc5f"],
+    ["chunk-08x6myp6.js", "permission-reason", "b271399ce9042fa5a665c1e82056f15209c09f7d0ff3f4f0498d15f48c790765"],
+    ["chunk-1vz1gp33.js", "help", "0e8cdd59eadc50d454547f865ad370eb8428573adb18eb20ba86e2b3128929e9"],
+    ["chunk-n2p94yps.js", "help", "90af3cc4176fb57b6774f98231f32e000ad05e2d458dc1bf72197d8663aaf1be"],
+    ["chunk-wew3baed.js", "background-help", "f8c7ca13cc414be0ce0696838e61c0a8feb5cc8cf2906eab471a707b4e0d478a"],
+    ["chunk-fcpw4hp9.js", "help", "1c77baa05579c8d91362cbf485281911559f5dba01a49e54518236e602ea6297"],
+    ["chunk-g0xm287f.js", "help-formatter", "e9642d967300cf67684942b5478e1e10a83858e23f0b017ec36e915246ccb72f"],
+    ["chunk-skd50dva.js", "usage-panel", "ce8a4faf4b3a2cee0b388100888a55653fe5c5343a16c1221754bea26552abfc"],
+    ["chunk-j3epzqgc.js", "chat-settings", "c5fe97d2dc37466836dee9451359faafd6ccf399aa37c7da15f777dd74d91158"],
+    ["chunk-r17f8fr4.js", "review-label", "cfea076f858ac97165634e8513a1f15765874f1dc2ebd84b8b9874de8413a76e"],
+  ]]],
+]);
+
 const KEY_HINT_ACTIONS = {
   amend: "修改", add: "添加", back: "返回", cancel: "取消", confirm: "确认",
   continue: "继续", cycle: "切换", adjust: "调整", explain: "说明", list: "列表",
@@ -640,8 +663,8 @@ function rewriteMacDisplaySource(source, role, translations, replacements = macS
   return { source, changed };
 }
 
-function patchMacDisplayModules(bunData, bunOffsets, moduleStructSize, translations, { format, version, sourceHash }) {
-  const build = MAC_DISPLAY_BUILDS.get(version);
+function patchMacDisplayModules(bunData, bunOffsets, moduleStructSize, translations, { format, version, sourceHash, macX64 }) {
+  const build = (macX64 ? MAC_X64_DISPLAY_BUILDS : MAC_DISPLAY_BUILDS).get(version);
   if (format !== "MachO" || !build) return { sourceModules: 0, sourceReplacements: 0 };
   if (sourceHash !== build[0]) throw new Error(`macOS ${version} 构建指纹未经验证，未改动文件`);
   const { offset, length } = bunOffsets.modulesPtr;
@@ -704,7 +727,7 @@ function patchBinary(binaryPath, translations, { dryRun = false, mainTableOnly =
   const backupPath = binaryPath + ".zh-cn-backup";
   const sameVersionBackup = fs.existsSync(backupPath) && io.readExecutableVersion(backupPath) === version;
   const sourcePath = sameVersionBackup ? backupPath : binaryPath;
-  const { bunData, format, bunOffsets, moduleStructSize } = readContainer(sourcePath);
+  const { bunData, format, bunOffsets, moduleStructSize, macX64 } = readContainer(sourcePath);
   const original = fs.readFileSync(sourcePath);
   const sourceHash = crypto.createHash("sha256").update(original).digest("hex");
   const payloadOffset = original.indexOf(bunData);
@@ -712,7 +735,7 @@ function patchBinary(binaryPath, translations, { dryRun = false, mainTableOnly =
     throw new Error("无法唯一定位 Bun 数据，未改动文件");
   }
   const summary = patchStringPool(bunData, translations, { mainTableOnly });
-  const context = { format, version, sourceHash };
+  const context = { format, version, sourceHash, macX64 };
   const sourceSummary = mainTableOnly ? { sourceModules: 0, sourceReplacements: 0 } : format === "MachO"
     ? patchMacDisplayModules(bunData, bunOffsets, moduleStructSize, translations, context)
     : patchWin289DisplayModules(bunData, bunOffsets, moduleStructSize, translations, context);

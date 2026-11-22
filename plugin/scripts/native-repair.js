@@ -77,7 +77,7 @@ function repair(input, stateRoot) {
     const result = fs.existsSync(`${target}.zh-cn-backup`) ? restore(input, stateRoot) : { restored: false };
     return { ...result, mode: "english", changed: result.restored };
   }
-  if (!["darwin-arm64", "win32-x64", "linux-x64"].includes(host)) throw new Error(`当前平台 ${host} 暂不支持 CLI Patch`);
+  if (!["darwin-arm64", "darwin-x64", "win32-x64", "linux-x64"].includes(host)) throw new Error(`当前平台 ${host} 暂不支持 CLI Patch`);
   const receiptFile = `${target}.zh-cn-repair.json`, backup = `${target}.zh-cn-backup`;
   const currentHash = hash(target), patchRevision = revision();
   const pendingFile = `${receiptFile}.pending`, pending = readJson(pendingFile);

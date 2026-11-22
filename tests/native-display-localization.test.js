@@ -118,6 +118,10 @@ test("unverified Mac builds and invalid source anchors are rejected before mutat
   assert.throws(() => patchMacDisplayModules(buffer, { modulesPtr: { offset: 0, length: 52 } }, 52, [], {
     format: "MachO", version: "2.1.286", sourceHash: "0".repeat(64),
   }), /指纹未经验证/);
+  const armHash = MAC_DISPLAY_BUILDS.get("2.1.296")[0];
+  assert.throws(() => patchMacDisplayModules(buffer, {}, 52, [], {
+    format: "MachO", version: "2.1.296", sourceHash: armHash, macX64: true,
+  }), /指纹未经验证/);
   assert.deepEqual(buffer, before);
   assert.throws(() => rewriteMacDisplaySource('const title="Diff";', "permission", []), /锚点不匹配/);
   assert.deepEqual(patchMacDisplayModules(buffer, {}, 52, [], { format: "ELF", version: "2.1.286" }), { sourceModules: 0, sourceReplacements: 0 });

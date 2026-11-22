@@ -177,6 +177,10 @@ Claude Code 的 UI 文字硬编码在 13MB 的压缩文件内。我们通过分�
 
 ## 💻 支持环境与版本
 
+Intel Mac（Darwin x64）原生汉化为实验性功能。使用 Node.js 24+ 和 `node-lief@1.3.2` 运行 `bash install.sh`，补丁通过本机启动自检后才替换程序。
+
+GitHub Actions 的 CI → `macos-x64-build` 在 Intel runner 上构建官方 `2.1.296` 的汉化版本，验证签名、中文帮助及安装回滚后上传 `claude-zh-cn-darwin-x64-2.1.296` 产物。
+
 macOS arm64 的 Claude Code `2.1.296` 显示模块包含 `using` 语法，界面补丁需用 **Node.js 24+** 运行。旧 Node 会在语法校验时拒绝该补丁并保留当前程序和备份；等待动词等设置不受影响。
 
 <!-- readme-support-window:support-systems:start -->
